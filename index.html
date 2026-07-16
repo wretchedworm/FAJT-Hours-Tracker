@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#102a27" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>FAJT Hours</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css?v=2" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">FAJT HOURS</p>
+          <h1 id="greeting">Good day</h1>
+          <p id="todayLabel" class="muted"></p>
+        </div>
+        <button id="settingsButton" class="icon-button" aria-label="Settings">⚙</button>
+      </header>
+
+      <main>
+        <section class="cycle-card">
+          <div class="cycle-heading">
+            <div>
+              <p class="label">CURRENT PAY CYCLE</p>
+              <h2 id="cycleLabel"></h2>
+            </div>
+            <span id="cycleDaysBadge" class="badge"></span>
+          </div>
+          <div class="progress-track" aria-label="Pay cycle progress">
+            <div id="progressBar" class="progress-bar"></div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric">
+              <span>Maximum payable</span>
+              <strong id="payableMaximum">0h 00m</strong>
+            </div>
+            <div class="metric metric-primary">
+              <span>Clocked so far</span>
+              <strong id="workedTotal">0h 00m</strong>
+            </div>
+            <div class="metric">
+              <span id="remainingTitle">Hours left</span>
+              <strong id="remainingTotal">0h 00m</strong>
+            </div>
+            <div class="metric metric-wide">
+              <span>Average needed per available day left</span>
+              <strong id="averageNeeded">0h 00m</strong>
+              <small id="remainingDaysText"></small>
+            </div>
+          </div>
+        </section>
+
+        <section id="todayCard" class="today-card">
+          <div class="section-heading">
+            <div>
+              <p class="label">TODAY</p>
+              <h2 id="todayStatus">Ready to start?</h2>
+            </div>
+            <span id="todayDayBadge" class="day-badge" aria-label="Today's date"></span>
+          </div>
+          <div id="todayDetails" class="today-details hidden"></div>
+          <div class="action-row">
+            <button id="clockInButton" class="button button-primary">Clock in</button>
+            <button id="clockOutButton" class="button button-dark" disabled>Clock out</button>
+          </div>
+          <p id="weekendMessage" class="notice hidden">Weekends are non-working days. Clock in is unavailable.</p>
+        </section>
+
+        <section class="calendar-section">
+          <div class="section-heading">
+            <div>
+              <p class="label">YOUR MONTH</p>
+              <h2 id="monthLabel"></h2>
+            </div>
+            <div class="month-nav">
+              <button id="prevMonth" class="icon-button" aria-label="Previous month">‹</button>
+              <button id="nextMonth" class="icon-button" aria-label="Next month">›</button>
+            </div>
+          </div>
+          <div class="weekday-row" aria-hidden="true">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+          <div id="calendarGrid" class="calendar-grid"></div>
+          <div class="legend">
+            <span><i class="legend-dot worked"></i>Worked</span>
+            <span><i class="legend-dot off"></i>Regular day off</span>
+          </div>
+        </section>
+
+        <section class="entries-section">
+          <div class="section-heading">
+            <div>
+              <p class="label">BREAKDOWN</p>
+              <h2>Hours this cycle</h2>
+            </div>
+            <button id="addPastEntry" class="text-button">+ Add entry</button>
+          </div>
+          <div id="openingBalanceRow" class="entry-row hidden"></div>
+          <div id="entriesList" class="entries-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <div id="modalBackdrop" class="modal-backdrop hidden">
+      <section id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <div class="modal-handle"></div>
+        <div class="modal-header">
+          <div>
+            <p id="modalEyebrow" class="label"></p>
+            <h2 id="modalTitle"></h2>
+          </div>
+          <button id="closeModal" class="icon-button" aria-label="Close">×</button>
+        </div>
+        <div id="modalBody"></div>
+      </section>
+    </div>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+    <p class="app-version">FAJT Hours · Version 1.9</p>
+    <script src="calculations.js?v=6"></script>
+    <script src="app.js?v=6"></script>
+  </body>
+</html>

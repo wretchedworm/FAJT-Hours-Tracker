@@ -1,0 +1,10 @@
+{
+  "name": "FAJT Hours",
+  "short_name": "FAJT",
+  "description": "Track worked hours across two monthly pay cycles.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f5ef",
+  "theme_color": "#102a27",
+  "icons": []
+}
