@@ -84,6 +84,10 @@ function entryInCycle(entry, cycle) {
   return date >= cycle.start && date <= cycle.end;
 }
 
+function totalWorkedMinutes(entries, openingBalance = 0) {
+  return Number(openingBalance || 0) + entries.reduce((sum, entry) => sum + Number(entry.netMinutes || 0), 0);
+}
+
 globalThis.FAJTCalculations = {
   LUNCH_MINUTES,
   DAILY_TARGET_MINUTES,
@@ -97,5 +101,6 @@ globalThis.FAJTCalculations = {
   weekdaysBetween,
   availableDays,
   entryInCycle,
+  totalWorkedMinutes,
 };
 })();

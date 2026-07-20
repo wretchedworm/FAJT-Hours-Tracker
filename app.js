@@ -8,6 +8,7 @@ const {
   parseISO,
   parseTime,
   timeText,
+  totalWorkedMinutes,
   weekdaysBetween,
   workMinutes,
 } = globalThis.FAJTCalculations;
@@ -31,7 +32,7 @@ function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 function cycleEntries(cycle) { return state.entries.filter((entry) => entryInCycle(entry, cycle)); }
 function currentSettings(cycle) { return state.cycleSettings[cycleKey(cycle)] || null; }
 function openingBalance(cycle) { return Number(state.openingBalances[cycleKey(cycle)] || 0); }
-function totalWorked(cycle) { return openingBalance(cycle) + cycleEntries(cycle).reduce((sum, entry) => sum + entry.netMinutes, 0); }
+function totalWorked(cycle) { return totalWorkedMinutes(cycleEntries(cycle), openingBalance(cycle)); }
 function todayEntry() { return state.entries.find((entry) => entry.date === todayISO()); }
 
 function formatDate(date, options = {}) { return new Intl.DateTimeFormat("en-SG", options).format(date); }
