@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>FAJT Hours</title>
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=3" />
   </head>
   <body>
     <div class="app-shell">
@@ -18,7 +18,10 @@
           <h1 id="greeting">Good day</h1>
           <p id="todayLabel" class="muted"></p>
         </div>
-        <button id="settingsButton" class="icon-button" aria-label="Settings">⚙</button>
+        <div class="topbar-actions">
+          <span id="syncPill" class="sync-pill hidden" role="status"></span>
+          <button id="settingsButton" class="icon-button" aria-label="Settings">⚙</button>
+        </div>
       </header>
 
       <main>
@@ -120,8 +123,10 @@
     </div>
 
     <div id="toast" class="toast hidden" role="status"></div>
-    <p class="app-version">FAJT Hours · Version 1.9</p>
-    <script src="calculations.js?v=7"></script>
-    <script src="app.js?v=7"></script>
+    <p class="app-version">FAJT Hours · Version 2.0</p>
+    <script src="config.js?v=8"></script>
+    <script src="sync.js?v=8"></script>
+    <script src="calculations.js?v=8"></script>
+    <script src="app.js?v=8"></script>
   </body>
 </html>

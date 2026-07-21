@@ -120,3 +120,32 @@ h2 { font-size: 21px; letter-spacing: -0.5px; }
   .modal { border-radius:28px; }
   .calendar-day small { font-size:10px; }
 }
+
+/* ------------------------------------------------------------------ sync UI */
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sync-pill {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.sync-pill[data-tone="ok"]    { background: rgba(52,199,123,0.14); color: #2f9e68; border-color: rgba(52,199,123,0.28); }
+.sync-pill[data-tone="busy"]  { background: rgba(120,140,255,0.14); color: #5c6ac4; border-color: rgba(120,140,255,0.28); }
+.sync-pill[data-tone="warn"]  { background: rgba(240,170,60,0.16); color: #b57717; border-color: rgba(240,170,60,0.3); }
+.sync-pill[data-tone="error"] { background: rgba(224,90,90,0.14); color: #c0453f; border-color: rgba(224,90,90,0.28); }
+.sync-pill[data-tone="idle"]  { background: rgba(120,120,120,0.12); color: #6b6b6b; border-color: rgba(120,120,120,0.22); }
+
+.sync-zone {
+  margin-top: 26px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(0,0,0,0.08);
+}

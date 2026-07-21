@@ -28,7 +28,13 @@ function loadState() {
   try { return { ...defaultState, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
   catch { return structuredClone(defaultState); }
 }
-function saveState() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); render(); }
+function persist() {
+  const sync = globalThis.FAJTSync;
+  if (sync) state = sync.prepare(state);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  sync?.notifyLocalChange();
+}
+function saveState() { persist(); render(); }
 function cycleEntries(cycle) { return state.entries.filter((entry) => entryInCycle(entry, cycle)); }
 function currentSettings(cycle) { return state.cycleSettings[cycleKey(cycle)] || null; }
 function openingBalance(cycle) { return Number(state.openingBalances[cycleKey(cycle)] || 0); }
@@ -194,11 +200,87 @@ function openEdit(id) {
 
 function openSettings() {
   const cycle=cycleFor(today()),key=cycleKey(cycle),settings=currentSettings(cycle)||{nonWorkingDays:[]},balance=openingBalance(cycle);
-  openModal("SETTINGS","Current pay cycle",`<div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="settingsOff" value="${d}" ${settings.nonWorkingDays.includes(d)?"checked":""}>${dayNames[d]}</label>`).join("")}</div></div><div class="split-fields"><label class="field"><span>Opening hours</span><input id="settingsHours" type="number" min="0" value="${Math.floor(balance/60)}"></label><label class="field"><span>Opening minutes</span><input id="settingsMinutes" type="number" min="0" max="59" value="${balance%60}"></label></div><p id="settingsError" class="error-text"></p><button id="saveSettings" class="button button-primary" style="width:100%">Save settings</button><div class="test-zone"><p class="label">TESTING</p><button id="loadSampleData" class="reset-option test-option"><span><strong>Load sample test data</strong><small>Add example workdays across this cycle</small></span><b>›</b></button><p class="testing-note">Sample entries are marked “Test” and may include future dates. Reset the current cycle when finished.</p></div><div class="danger-zone"><p class="label">RESET DATA</p><button id="resetCycle" class="reset-option"><span><strong>Reset current pay cycle</strong><small>Delete this cycle's hours and setup only</small></span><b>›</b></button><button id="resetAll" class="reset-option"><span><strong>Reset all app data</strong><small>Delete every saved cycle and start over</small></span><b>›</b></button></div>`);
+  openModal("SETTINGS","Current pay cycle",`<div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="settingsOff" value="${d}" ${settings.nonWorkingDays.includes(d)?"checked":""}>${dayNames[d]}</label>`).join("")}</div></div><div class="split-fields"><label class="field"><span>Opening hours</span><input id="settingsHours" type="number" min="0" value="${Math.floor(balance/60)}"></label><label class="field"><span>Opening minutes</span><input id="settingsMinutes" type="number" min="0" max="59" value="${balance%60}"></label></div><p id="settingsError" class="error-text"></p><button id="saveSettings" class="button button-primary" style="width:100%">Save settings</button>${syncSettingsHTML()}<div class="test-zone"><p class="label">TESTING</p><button id="loadSampleData" class="reset-option test-option"><span><strong>Load sample test data</strong><small>Add example workdays across this cycle</small></span><b>›</b></button><p class="testing-note">Sample entries are marked “Test” and may include future dates. Reset the current cycle when finished.</p></div><div class="danger-zone"><p class="label">RESET DATA</p><button id="resetCycle" class="reset-option"><span><strong>Reset current pay cycle</strong><small>Delete this cycle's hours and setup only</small></span><b>›</b></button><button id="resetAll" class="reset-option"><span><strong>Reset all app data</strong><small>Delete every saved cycle and start over</small></span><b>›</b></button></div>`);
   $("saveSettings").onclick=()=>{const h=Number($("settingsHours").value||0),m=Number($("settingsMinutes").value||0);if(h<0||m<0||m>59){$("settingsError").textContent="Enter a valid opening balance.";return;}state.cycleSettings[key]={...settings,nonWorkingDays:[...document.querySelectorAll("input[name=settingsOff]:checked")].map(e=>Number(e.value))};state.openingBalances[key]=h*60+m;saveState();closeModal();showToast("Settings saved");};
   $("resetCycle").onclick=()=>openResetConfirmation("cycle",cycle);
   $("resetAll").onclick=()=>openResetConfirmation("all",cycle);
   $("loadSampleData").onclick=()=>openSampleDataConfirmation(cycle);
+  wireSyncSettings();
+}
+
+/* ------------------------------------------------------------------ sync UI */
+
+const SYNC_LABELS = {
+  local:   { text: "Not syncing",        tone: "idle"    },
+  offline: { text: "Offline — will sync", tone: "warn"   },
+  syncing: { text: "Syncing…",            tone: "busy"   },
+  synced:  { text: "Synced",              tone: "ok"     },
+  error:   { text: "Sync problem",        tone: "error"  },
+};
+
+function syncSettingsHTML() {
+  const sync = globalThis.FAJTSync;
+  if (!sync?.configured) {
+    return `<div class="sync-zone"><p class="label">SYNC</p><p class="testing-note">Cross-device sync is not configured yet. Add your Supabase URL and key to <b>config.js</b> to switch it on.</p></div>`;
+  }
+  if (!sync.connected) {
+    return `<div class="sync-zone"><p class="label">SYNC</p><button id="syncConnect" class="reset-option"><span><strong>Turn on device sync</strong><small>Share your hours between phone and Mac</small></span><b>›</b></button></div>`;
+  }
+  const label = SYNC_LABELS[sync.status] || SYNC_LABELS.local;
+  return `<div class="sync-zone"><p class="label">SYNC</p><p class="testing-note">Status: <b>${label.text}</b>${sync.statusDetail ? ` — ${sync.statusDetail}` : ""}</p><button id="syncNow" class="reset-option"><span><strong>Sync now</strong><small>Pull the latest from your other devices</small></span><b>›</b></button><button id="syncForget" class="reset-option"><span><strong>Stop syncing on this device</strong><small>Your cloud records are kept</small></span><b>›</b></button></div>`;
+}
+
+function wireSyncSettings() {
+  const sync = globalThis.FAJTSync;
+  if (!sync?.configured) return;
+  const connect = $("syncConnect");
+  if (connect) connect.onclick = () => openPasscodePrompt({ fromSettings: true });
+  const now = $("syncNow");
+  if (now) now.onclick = async () => { showToast("Syncing…"); await sync.refresh(); showToast(sync.status === "synced" ? "Up to date" : "Could not sync"); };
+  const forget = $("syncForget");
+  if (forget) forget.onclick = () => { sync.disconnect(); closeModal(); showToast("Sync turned off on this device"); };
+}
+
+function openPasscodePrompt({ fromSettings = false } = {}) {
+  openModal(
+    "SYNC",
+    "Enter your sync passcode",
+    `<div class="summary-box"><strong>Same passcode, same records</strong><p class="muted">Type the same passcode on every device you want to share hours with. Pick anything memorable — it is never sent to the server, only used to unlock your records.</p></div><label class="field"><span>Passcode</span><input id="passcodeInput" type="password" autocomplete="current-password" placeholder="At least 4 characters"></label><p id="passcodeError" class="error-text"></p><button id="passcodeSubmit" class="button button-primary" style="width:100%">Connect this device</button>${fromSettings ? `<div class="modal-actions"><button id="passcodeCancel" class="button button-secondary">Cancel</button></div>` : ""}`
+  );
+  const input = $("passcodeInput");
+  const submit = $("passcodeSubmit");
+  const cancel = $("passcodeCancel");
+  if (cancel) cancel.onclick = openSettings;
+  input.focus();
+  const go = async () => {
+    submit.disabled = true;
+    submit.textContent = "Connecting…";
+    try {
+      await globalThis.FAJTSync.connect(input.value);
+      state = loadState();
+      closeModal();
+      render();
+      showToast("Sync is on");
+    } catch (error) {
+      $("passcodeError").textContent = error.message;
+      submit.disabled = false;
+      submit.textContent = "Connect this device";
+    }
+  };
+  submit.onclick = go;
+  input.addEventListener("keydown", (event) => { if (event.key === "Enter") go(); });
+}
+
+function renderSyncPill(status, detail) {
+  const pill = $("syncPill");
+  if (!pill) return;
+  const sync = globalThis.FAJTSync;
+  if (!sync?.configured || (!sync.connected && status === "local")) { pill.classList.add("hidden"); return; }
+  const label = SYNC_LABELS[status] || SYNC_LABELS.local;
+  pill.classList.remove("hidden");
+  pill.dataset.tone = label.tone;
+  pill.textContent = label.text;
+  pill.title = detail || label.text;
 }
 
 function openSampleDataConfirmation(cycle) {
@@ -247,7 +329,7 @@ function openResetConfirmation(scope, cycle) {
       delete state.openingBalances[key];
       delete state.cycleSettings[key];
     }
-    localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+    persist();
     closeModal();
     render();
     showToast(isAll?"All app data reset":"Current pay cycle reset");
@@ -260,4 +342,30 @@ $("prevMonth").onclick=()=>{calendarDate=new Date(calendarDate.getFullYear(),cal
 $("nextMonth").onclick=()=>{calendarDate=new Date(calendarDate.getFullYear(),calendarDate.getMonth()+1,1);renderCalendar();};
 $("addPastEntry").onclick=()=>{openModal("ADD HOURS","Choose a weekday",`<label class="field"><span>Date</span><input id="pastDate" type="date" max="${todayISO()}"></label><p id="pastDateError" class="error-text"></p><button id="continuePast" class="button button-primary" style="width:100%">Continue</button>`);$("continuePast").onclick=()=>{const value=$("pastDate").value,date=value&&parseISO(value);if(!date||date>today()||isWeekend(date)){$("pastDateError").textContent="Choose a past or current weekday.";return;}if(state.entries.some(e=>e.date===value)){$("pastDateError").textContent="An entry already exists for this date.";return;}openManualEntry(value);};};
 if(location.protocol !== "file:" && "serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+
 render();
+
+/* ---------------------------------------------------------------- boot sync */
+
+(async () => {
+  const sync = globalThis.FAJTSync;
+  if (!sync) return;
+
+  sync.onStatus(renderSyncPill);
+
+  // A device that pulled newer records from the cloud re-renders in place.
+  sync.onRemoteUpdate = (merged) => {
+    state = { ...defaultState, ...merged };
+    render();
+  };
+
+  if (!sync.configured) return;
+
+  const restored = await sync.restore();
+  if (restored) {
+    state = loadState();
+    render();
+  } else {
+    openPasscodePrompt();
+  }
+})();
