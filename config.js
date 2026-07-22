@@ -14,6 +14,6 @@
 // sent anywhere.
 
 globalThis.FAJT_CONFIG = {
-  url: "",
-  anonKey: "",
+  url: "https://kppfeacekrnkfmgxmktw.supabase.co",
+  anonKey: "sb_publishable_12vkkAfXdZZqB7jO0lLeYA_TLHiMgxm",
 };
