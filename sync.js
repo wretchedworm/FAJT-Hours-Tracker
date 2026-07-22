@@ -71,7 +71,7 @@
     return map;
   };
   const settingsFingerprint = (state) =>
-    JSON.stringify([state?.openingBalances || {}, state?.cycleSettings || {}]);
+    JSON.stringify([state?.openingBalances || {}, state?.cycleSettings || {}, state?.name || ""]);
 
   /**
    * Compare the state about to be saved against the last snapshot and record
@@ -167,6 +167,9 @@
       deletedEntries,
       openingBalances: settingsSource.openingBalances || {},
       cycleSettings: settingsSource.cycleSettings || {},
+      // Name travels with settings; fall back to whichever side has a non-empty
+      // one so it can't be lost when the other device never set it.
+      name: settingsSource.name || local.name || remote.name || "",
       settingsUpdatedAt: Math.max(localSettingsTs, remoteSettingsTs),
     };
   }

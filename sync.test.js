@@ -164,6 +164,18 @@ test("settings and opening balances sync too", async () => {
   assert.deepEqual(mac.read().cycleSettings["2026-07-16_2026-07-31"].nonWorkingDays, [1, 5]);
 });
 
+test("the user's name syncs to a device that never set one", async () => {
+  const server = { rows: new Map(), writes: [] };
+  const phone = makeDevice("phone", server);
+  const mac = makeDevice("mac", server);
+
+  await phone.sync.connect("pineapple");
+  await phone.save((s) => { s.name = "Darren"; });
+
+  await mac.sync.connect("pineapple");
+  assert.equal(mac.read().name, "Darren");
+});
+
 test("offline saves keep working with no server at all", async () => {
   const server = { rows: new Map(), writes: [] };
   const phone = makeDevice("phone", server);

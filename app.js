@@ -15,7 +15,7 @@ const {
 
 const STORAGE_KEY = "fajt-hours-v1";
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const defaultState = { version: 1, entries: [], openingBalances: {}, cycleSettings: {} };
+const defaultState = { version: 1, name: "", entries: [], openingBalances: {}, cycleSettings: {} };
 let state = loadState();
 let calendarDate = new Date();
 
@@ -61,7 +61,8 @@ function render() {
   const remainingDays = availableDays(cycle, now, nonWorking, Boolean(entry?.clockOut));
   const average = difference > 0 && remainingDays > 0 ? Math.ceil(difference / remainingDays) : 0;
 
-  $("greeting").textContent = `${now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening"}, Darren`;
+  const partOfDay = now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening";
+  $("greeting").textContent = state.name ? `${partOfDay}, ${state.name}` : partOfDay;
   $("todayLabel").textContent = formatDate(now, { weekday:"long", day:"numeric", month:"long", year:"numeric" });
   $("todayDayBadge").innerHTML = `<small>${formatDate(now,{weekday:"short"}).toUpperCase()}</small><strong>${now.getDate()}</strong><small>${formatDate(now,{month:"short"}).toUpperCase()}</small>`;
   $("cycleLabel").textContent = `${formatDate(cycle.start,{day:"numeric",month:"short"})} – ${formatDate(cycle.end,{day:"numeric",month:"short",year:"numeric"})}`;
@@ -97,7 +98,22 @@ function render() {
 
 function maybeOpenSetup() {
   const cyc = cycleFor(today());
-  if (!currentSettings(cyc)) openSetup(cyc);
+  if (!currentSettings(cyc)) { openSetup(cyc); return; }
+  // Already set up but no name yet (e.g. an install from before names existed):
+  // ask once so the greeting is personal.
+  if (!state.name) openNamePrompt();
+}
+
+function openNamePrompt() {
+  openModal("WELCOME", "What should we call you?",
+    `<div class="summary-box"><p class="muted">Your name just personalises the greeting. It syncs to your other devices and stays private to your passcode.</p></div>
+     <label class="field"><span>Your name</span><input id="nameInput" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label>
+     <button id="saveName" class="button button-primary" style="width:100%">Save</button>`);
+  const input = $("nameInput");
+  input.focus();
+  const save = () => { state.name = input.value.trim(); saveState(); closeModal(); if (state.name) showToast(`Hi, ${state.name}`); };
+  $("saveName").onclick = save;
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
 }
 
 function detailChip(label,value){ return `<div class="detail-chip"><small>${label}</small><strong>${value}</strong></div>`; }
@@ -144,6 +160,7 @@ function closeModal(){ $("modalBackdrop").classList.add("hidden"); document.body
 function openSetup(cycle) {
   const key=cycleKey(cycle);
   openModal("NEW PAY CYCLE","Set up this cycle",`
+    <label class="field"><span>Your name</span><input id="setupName" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label>
     <p class="muted">Choose any weekdays you know you will not work. This only adjusts your daily average—not the cycle target.</p>
     <div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="offDay" value="${d}">${dayNames[d]}</label>`).join("")}</div></div>
     <div class="summary-box"><strong>Already worked this cycle?</strong><p class="muted">Enter an optional opening balance. You can also add detailed past entries afterward.</p><div class="split-fields"><label class="field"><span>Hours</span><input id="openingHours" type="number" min="0" value="0" inputmode="numeric"></label><label class="field"><span>Minutes</span><input id="openingMinutes" type="number" min="0" max="59" value="0" inputmode="numeric"></label></div></div>
@@ -152,6 +169,7 @@ function openSetup(cycle) {
     const offDays=[...document.querySelectorAll("input[name=offDay]:checked")].map(el=>Number(el.value));
     const hours=Number($("openingHours").value||0), minutes=Number($("openingMinutes").value||0);
     if(hours<0||minutes<0||minutes>59){$("setupError").textContent="Enter a valid opening balance.";return;}
+    state.name=$("setupName").value.trim();
     state.cycleSettings[key]={nonWorkingDays:offDays,createdAt:new Date().toISOString()}; state.openingBalances[key]=hours*60+minutes; saveState(); closeModal(); showToast("Pay cycle ready");
   };
 }
@@ -211,8 +229,8 @@ function openEdit(id) {
 
 function openSettings() {
   const cycle=cycleFor(today()),key=cycleKey(cycle),settings=currentSettings(cycle)||{nonWorkingDays:[]},balance=openingBalance(cycle);
-  openModal("SETTINGS","Current pay cycle",`<div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="settingsOff" value="${d}" ${settings.nonWorkingDays.includes(d)?"checked":""}>${dayNames[d]}</label>`).join("")}</div></div><div class="split-fields"><label class="field"><span>Opening hours</span><input id="settingsHours" type="number" min="0" value="${Math.floor(balance/60)}"></label><label class="field"><span>Opening minutes</span><input id="settingsMinutes" type="number" min="0" max="59" value="${balance%60}"></label></div><p id="settingsError" class="error-text"></p><button id="saveSettings" class="button button-primary" style="width:100%">Save settings</button>${syncSettingsHTML()}<div class="test-zone"><p class="label">TESTING</p><button id="loadSampleData" class="reset-option test-option"><span><strong>Load sample test data</strong><small>Add example workdays across this cycle</small></span><b>›</b></button><p class="testing-note">Sample entries are marked “Test” and may include future dates. Reset the current cycle when finished.</p></div><div class="danger-zone"><p class="label">RESET DATA</p><button id="resetCycle" class="reset-option"><span><strong>Reset current pay cycle</strong><small>Delete this cycle's hours and setup only</small></span><b>›</b></button><button id="resetAll" class="reset-option"><span><strong>Reset all app data</strong><small>Delete every saved cycle and start over</small></span><b>›</b></button></div>`);
-  $("saveSettings").onclick=()=>{const h=Number($("settingsHours").value||0),m=Number($("settingsMinutes").value||0);if(h<0||m<0||m>59){$("settingsError").textContent="Enter a valid opening balance.";return;}state.cycleSettings[key]={...settings,nonWorkingDays:[...document.querySelectorAll("input[name=settingsOff]:checked")].map(e=>Number(e.value))};state.openingBalances[key]=h*60+m;saveState();closeModal();showToast("Settings saved");};
+  openModal("SETTINGS","Current pay cycle",`<label class="field"><span>Your name</span><input id="settingsName" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label><div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="settingsOff" value="${d}" ${settings.nonWorkingDays.includes(d)?"checked":""}>${dayNames[d]}</label>`).join("")}</div></div><div class="split-fields"><label class="field"><span>Opening hours</span><input id="settingsHours" type="number" min="0" value="${Math.floor(balance/60)}"></label><label class="field"><span>Opening minutes</span><input id="settingsMinutes" type="number" min="0" max="59" value="${balance%60}"></label></div><p id="settingsError" class="error-text"></p><button id="saveSettings" class="button button-primary" style="width:100%">Save settings</button>${syncSettingsHTML()}<div class="test-zone"><p class="label">TESTING</p><button id="loadSampleData" class="reset-option test-option"><span><strong>Load sample test data</strong><small>Add example workdays across this cycle</small></span><b>›</b></button><p class="testing-note">Sample entries are marked “Test” and may include future dates. Reset the current cycle when finished.</p></div><div class="danger-zone"><p class="label">RESET DATA</p><button id="resetCycle" class="reset-option"><span><strong>Reset current pay cycle</strong><small>Delete this cycle's hours and setup only</small></span><b>›</b></button><button id="resetAll" class="reset-option"><span><strong>Reset all app data</strong><small>Delete every saved cycle and start over</small></span><b>›</b></button></div>`);
+  $("saveSettings").onclick=()=>{const h=Number($("settingsHours").value||0),m=Number($("settingsMinutes").value||0);if(h<0||m<0||m>59){$("settingsError").textContent="Enter a valid opening balance.";return;}state.name=$("settingsName").value.trim();state.cycleSettings[key]={...settings,nonWorkingDays:[...document.querySelectorAll("input[name=settingsOff]:checked")].map(e=>Number(e.value))};state.openingBalances[key]=h*60+m;saveState();closeModal();showToast("Settings saved");};
   $("resetCycle").onclick=()=>openResetConfirmation("cycle",cycle);
   $("resetAll").onclick=()=>openResetConfirmation("all",cycle);
   $("loadSampleData").onclick=()=>openSampleDataConfirmation(cycle);
