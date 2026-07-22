@@ -106,7 +106,7 @@ function maybeOpenSetup() {
 
 function openNamePrompt() {
   openModal("WELCOME", "What should we call you?",
-    `<div class="summary-box"><p class="muted">Your name just personalises the greeting. It syncs to your other devices and stays private to your passcode.</p></div>
+    `<div class="summary-box"><p class="muted">Your name just personalises the greeting. It syncs to your other devices and stays private to your password.</p></div>
      <label class="field"><span>Your name</span><input id="nameInput" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label>
      <button id="saveName" class="button button-primary" style="width:100%">Save</button>`);
   const input = $("nameInput");
@@ -273,8 +273,8 @@ function wireSyncSettings() {
 function openPasscodePrompt({ fromSettings = false } = {}) {
   openModal(
     "SYNC",
-    "Enter your sync passcode",
-    `<div class="summary-box"><strong>Same passcode, same records</strong><p class="muted">Type the same passcode on every device you want to share hours with. Pick anything memorable — it is never sent to the server, only used to unlock your records.</p></div><label class="field"><span>Passcode</span><input id="passcodeInput" type="password" autocomplete="current-password" placeholder="At least 4 characters"></label><p id="passcodeError" class="error-text"></p><button id="passcodeSubmit" class="button button-primary" style="width:100%">Connect this device</button>${fromSettings ? `<div class="modal-actions"><button id="passcodeCancel" class="button button-secondary">Cancel</button></div>` : ""}`
+    "Enter your sync password",
+    `<div class="summary-box"><strong>Sync across your devices</strong><p class="muted">Your password lets you see the same hours on every device you open this app on — use the same one each time. <b>Choose something only you would know — avoid easy codes like 1234.</b> It stays on this device, is never uploaded, and simply unlocks your own private records.</p></div><label class="field"><span>Password</span><input id="passcodeInput" type="password" autocomplete="current-password" placeholder="At least 4 characters"></label><p id="passcodeError" class="error-text"></p><button id="passcodeSubmit" class="button button-primary" style="width:100%">Connect this device</button>${fromSettings ? `<div class="modal-actions"><button id="passcodeCancel" class="button button-secondary">Cancel</button></div>` : ""}`
   );
   const input = $("passcodeInput");
   const submit = $("passcodeSubmit");
