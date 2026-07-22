@@ -88,7 +88,16 @@ function render() {
   }
   renderCalendar();
   renderEntries(cycle);
-  if (!settings) setTimeout(() => openSetup(cycle), 80);
+  // When sync is configured, the passcode/connect flow decides when to show
+  // setup (after a chance to pull an existing cycle from the cloud). Only the
+  // local-only build auto-opens setup here, otherwise it races over — and
+  // buries — the passcode prompt on a fresh device.
+  if (!settings && !globalThis.FAJTSync?.configured) setTimeout(() => openSetup(cycle), 80);
+}
+
+function maybeOpenSetup() {
+  const cyc = cycleFor(today());
+  if (!currentSettings(cyc)) openSetup(cyc);
 }
 
 function detailChip(label,value){ return `<div class="detail-chip"><small>${label}</small><strong>${value}</strong></div>`; }
@@ -253,6 +262,11 @@ function openPasscodePrompt({ fromSettings = false } = {}) {
   const submit = $("passcodeSubmit");
   const cancel = $("passcodeCancel");
   if (cancel) cancel.onclick = openSettings;
+  // On a fresh device, dismissing the boot prompt should fall back to local
+  // setup rather than leaving a blank screen. Restore the default X after.
+  if (!fromSettings) {
+    $("closeModal").onclick = () => { closeModal(); $("closeModal").onclick = closeModal; maybeOpenSetup(); };
+  }
   input.focus();
   const go = async () => {
     submit.disabled = true;
@@ -263,6 +277,9 @@ function openPasscodePrompt({ fromSettings = false } = {}) {
       closeModal();
       render();
       showToast("Sync is on");
+      // If the cloud had nothing for this passcode, this device still needs a
+      // cycle set up. If it pulled an existing cycle, settings already exist.
+      maybeOpenSetup();
     } catch (error) {
       $("passcodeError").textContent = error.message;
       submit.disabled = false;
@@ -367,6 +384,7 @@ render();
   if (restored) {
     state = loadState();
     render();
+    maybeOpenSetup();
   } else {
     openPasscodePrompt();
   }
