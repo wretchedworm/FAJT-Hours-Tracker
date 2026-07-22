@@ -4,7 +4,7 @@ A mobile-first work-hours tracker for two monthly pay cycles: the 1st–15th and
 
 ## Live app
 
-https://wretchedworm.github.io/FAJT-Clock-In-Out-App/
+https://wretchedworm.github.io/FAJT-Hours-Tracker/
 
 Open that on any device. On iPhone, tap Share → "Add to Home Screen" to install it
 like an app (it works offline once installed).
