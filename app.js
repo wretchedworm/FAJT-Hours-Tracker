@@ -56,7 +56,9 @@ function render() {
   const worked = totalWorked(cycle);
   const difference = target - worked;
   const nonWorking = settings?.nonWorkingDays || [];
-  const remainingDays = availableDays(cycle, now, nonWorking, Boolean(entry));
+  // Today stays an "available day" until it is clocked OUT. A still-open
+  // clock-in means hours are yet to be logged today, so it still counts.
+  const remainingDays = availableDays(cycle, now, nonWorking, Boolean(entry?.clockOut));
   const average = difference > 0 && remainingDays > 0 ? Math.ceil(difference / remainingDays) : 0;
 
   $("greeting").textContent = `${now.getHours() < 12 ? "Good morning" : now.getHours() < 18 ? "Good afternoon" : "Good evening"}, Darren`;
