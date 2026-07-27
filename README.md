@@ -1,4 +1,4 @@
-# FAJT Hours
+# FAJT Hours Tracking
 
 A mobile-first work-hours tracker for two monthly pay cycles: the 1st–15th and the 16th–last day.
 
@@ -9,9 +9,15 @@ https://wretchedworm.github.io/FAJT-Hours-Tracker/
 Open that on any device. On iPhone, tap Share → "Add to Home Screen" to install it
 like an app (it works offline once installed).
 
-## Turning on cross-device sync
+Cross-device sync is already turned on for this live app (`config.js` in this
+repo ships with a Supabase project connected) — just open the app on each device
+and set the same sync password. See below for what that means and how it works.
 
-Sync is built and tested, but it needs a free database of your own. Three steps,
+## Turning on cross-device sync for your own copy
+
+If you fork this project and want your own separate, private database instead
+of sharing the one already wired up above, clear the `url`/`anonKey` in
+`config.js` and point them at a Supabase project of your own. Three steps,
 about five minutes.
 
 ### 1. Make a Supabase project
@@ -34,12 +40,12 @@ In the Supabase sidebar: **Project Settings** → **Data API**. Copy:
 | `anon` `public` key | `anonKey`                |
 
 Save, commit, push. Wait a minute for GitHub Pages, then open the app — it will
-ask for a passcode. **Type the same passcode on your phone and your Mac** and both
+ask for a sync password. **Type the same password on your phone and your Mac** and both
 show the same records from then on.
 
 The `anon` key is safe to publish. It cannot read the database on its own: the
 setup script blocks direct table access and exposes only two functions, both of
-which demand your room ID. Knowing the passcode is the only way in.
+which demand your room ID. Knowing the password is the only way in.
 
 ## Where your data lives
 
@@ -51,8 +57,8 @@ If two devices are edited while offline, the merge is per-day rather than
 whole-file — separate days both survive. Only if you edit *the same day* on two
 devices does one win, and it is the later edit.
 
-Your passcode never leaves your device; it is hashed into a long ID and only that
-ID is sent. This also means **there is no password reset**. Forget the passcode
+Your password never leaves your device; it is hashed into a long ID and only that
+ID is sent. This also means **there is no password reset**. Forget the password
 and the records under it are unreachable.
 
 ## Open locally
