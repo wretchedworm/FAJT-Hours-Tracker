@@ -150,3 +150,12 @@ h2 { font-size: 21px; letter-spacing: -0.5px; }
   padding-top: 18px;
   border-top: 1px solid rgba(0,0,0,0.08);
 }
+
+/* --------------------------------------------------- editable clock-in chip */
+/* The Clock-in tile on the Today card becomes a tappable target while you are
+   still clocked in, so you can correct a mistyped clock-in without clocking
+   out first. It reads "Clock in · edit" and is highlighted to look tappable. */
+
+.detail-chip-editable { border-color: var(--accent); background: var(--accent-soft); cursor: pointer; }
+.detail-chip-editable small { color: var(--accent); font-weight: 700; }
+.detail-chip-editable:active { transform: scale(0.98); }

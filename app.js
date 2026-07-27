@@ -85,7 +85,9 @@ function render() {
   } else {
     $("todayStatus").textContent = entry.clockOut ? `${durationText(entry.netMinutes)} worked` : "Currently clocked in";
     $("todayDetails").classList.remove("hidden");
-    $("todayDetails").innerHTML = detailChip("Clock in", timeText(entry.clockIn)) + detailChip(entry.clockOut ? "Clock out" : "Target out", timeText(entry.clockOut ?? entry.targetOut)) + detailChip(entry.clockOut ? "Net worked" : "Target", durationText(entry.netMinutes ?? entry.targetMinutes));
+    const openToday = !entry.clockOut;
+    $("todayDetails").innerHTML = detailChip("Clock in", timeText(entry.clockIn), openToday ? "editClockInChip" : "") + detailChip(entry.clockOut ? "Clock out" : "Target out", timeText(entry.clockOut ?? entry.targetOut)) + detailChip(entry.clockOut ? "Net worked" : "Target", durationText(entry.netMinutes ?? entry.targetMinutes));
+    if (openToday) { const chip = $("editClockInChip"); if (chip) chip.onclick = () => openEdit(entry.id); }
   }
   renderCalendar();
   renderEntries(cycle);
@@ -116,7 +118,7 @@ function openNamePrompt() {
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
 }
 
-function detailChip(label,value){ return `<div class="detail-chip"><small>${label}</small><strong>${value}</strong></div>`; }
+function detailChip(label,value,editId){ const on=Boolean(editId); return `<div class="detail-chip${on?" detail-chip-editable":""}"${on?` id="${editId}"`:""}><small>${on?`${label} · edit`:label}</small><strong>${value}</strong></div>`; }
 
 function renderCalendar() {
   const year=calendarDate.getFullYear(), month=calendarDate.getMonth();
@@ -220,11 +222,20 @@ function openManualEntry(date) {
 
 function openEdit(id) {
   const entry=state.entries.find(e=>e.id===id);if(!entry)return;
+  if(entry.clockOut==null)return openEditOpen(entry);
   openModal("EDIT ENTRY",inputDateLabel(entry.date),`${timeField("editIn","Clock-in time",timeText(entry.clockIn))}${timeField("editOut","Clock-out time",entry.clockOut!=null?timeText(entry.clockOut):"")}<div id="editPreview" class="summary-box"></div><p id="editError" class="error-text"></p><div class="modal-actions"><button id="deleteEntry" class="button button-danger">Delete</button><button id="saveEdit" class="button button-primary">Save changes</button></div>`);
   const preview=()=>{const result=workMinutes($("editIn").value,$("editOut").value),box=$("editPreview");box.innerHTML=result?`<div class="summary-line"><span>Lunch deduction</span><strong>${result.lunch?"30 minutes":"None"}</strong></div><div class="summary-line"><span>Net worked</span><strong>${durationText(result.net)}</strong></div>`:`<span>Enter a valid clock-in and clock-out time.</span>`;return result;};preview();
   ["editIn","editOut"].forEach(x=>$(x).addEventListener("input",preview));
   $("saveEdit").onclick=()=>{const start=parseTime($("editIn").value),end=parseTime($("editOut").value),result=workMinutes(start,end);if(!result){$("editError").textContent="Clock-out must be later than clock-in on the same day.";return;}Object.assign(entry,{clockIn:start,clockOut:end,elapsedMinutes:result.elapsed,lunchMinutes:result.lunch,netMinutes:result.net,updatedAt:new Date().toISOString()});saveState();closeModal();showToast("Entry updated");};
   $("deleteEntry").onclick=()=>{if(confirm("Delete this work entry?")){state.entries=state.entries.filter(e=>e.id!==id);saveState();closeModal();showToast("Entry deleted");}};
+}
+
+function openEditOpen(entry) {
+  openModal("EDIT ENTRY",inputDateLabel(entry.date),`${timeField("editInOpen","Clock-in time",timeText(entry.clockIn))}<div class="split-fields"><label class="field"><span>Target hours</span><input id="editTargetHours" type="number" min="0" value="${Math.floor((entry.targetMinutes||0)/60)}" inputmode="numeric"></label><label class="field"><span>Target minutes</span><input id="editTargetMinutes" type="number" min="0" max="59" value="${(entry.targetMinutes||0)%60}" inputmode="numeric"></label></div><div id="editOpenPreview" class="summary-box hidden"></div><p id="editOpenError" class="error-text"></p><div class="modal-actions"><button id="deleteEntryOpen" class="button button-danger">Delete</button><button id="saveEditOpen" class="button button-primary">Save changes</button></div>`);
+  const preview=()=>{const start=parseTime($("editInOpen").value),target=Number($("editTargetHours").value||0)*60+Number($("editTargetMinutes").value||0),box=$("editOpenPreview");if(start===null||target<=0){box.classList.add("hidden");return;}const targetOut=start+target+(start+target>12*60?30:0);box.classList.remove("hidden");box.innerHTML=`<div class="summary-line"><span>Target clock-out</span><strong>${timeText(targetOut)}</strong></div><div class="summary-line"><span>Net target</span><strong>${durationText(target)}</strong></div>`;};
+  ["editInOpen","editTargetHours","editTargetMinutes"].forEach(id=>$(id).addEventListener("input",preview));preview();
+  $("saveEditOpen").onclick=()=>{const start=parseTime($("editInOpen").value),h=Number($("editTargetHours").value||0),m=Number($("editTargetMinutes").value||0),target=h*60+m;if(start===null){$("editOpenError").textContent="Enter a valid clock-in time.";return;}if(target<=0||m>59){$("editOpenError").textContent="Enter a valid target duration.";return;}const targetOut=start+target+(start+target>12*60?30:0);if(targetOut>=1440){$("editOpenError").textContent="The target must finish on the same day.";return;}Object.assign(entry,{clockIn:start,targetMinutes:target,targetOut,updatedAt:new Date().toISOString()});saveState();closeModal();showToast("Clock-in updated");};
+  $("deleteEntryOpen").onclick=()=>{if(confirm("Delete this work entry?")){state.entries=state.entries.filter(e=>e.id!==entry.id);saveState();closeModal();showToast("Entry deleted");}};
 }
 
 function openSettings() {
