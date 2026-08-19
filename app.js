@@ -46,6 +46,58 @@ function inputDateLabel(iso) { return formatDate(parseISO(iso), { weekday:"long"
 function isWeekend(date) { return date.getDay() === 0 || date.getDay() === 6; }
 function showToast(message) { const el=$("toast"); el.textContent=message; el.classList.remove("hidden"); setTimeout(()=>el.classList.add("hidden"),2200); }
 
+/* ---------------------------------------------------------------- theming */
+// Colour schemes. The actual colours live in styles.css under
+// :root[data-theme="id"]; this list only drives the picker + status-bar
+// colour. Theme choice is stored per-device (it is a display preference, not
+// account data) so your phone and Mac can differ. Keep the ids + status-bar
+// colours in sync with the inline script in index.html.
+const THEME_KEY = "fajt-theme-v1";
+const DEFAULT_THEME = "seiheki";
+const THEMES = [
+  { id:"seiheki",    name:"Teal & Pine",        jp:"青碧", color:"#163f3b", dots:["#163f3b","#2f915f","#237a5c","#eef2ec"] },
+  { id:"nando",      name:"Forest & Teal",      jp:"納戸", color:"#173a2b", dots:["#173a2b","#1f8f88","#256b56","#eef2eb"] },
+  { id:"koke",       name:"Moss & Forest",      jp:"苔",   color:"#233820", dots:["#233820","#5f7d34","#3f7d52","#f1f0e5"] },
+  { id:"seiji",      name:"Celadon",            jp:"青磁", color:"#2f5651", dots:["#2f5651","#3f8f79","#3d8b76","#eef4ef"] },
+  { id:"fukamidori", name:"Deep Forest · dark", jp:"深緑", color:"#101a15", dots:["#101a15","#57c08c","#3f9e73","#1b2c22"] },
+  { id:"original",   name:"Teal & Coral",       jp:"現行", color:"#102a27", dots:["#102a27","#f06c45","#23765c","#f4f5ef"] },
+];
+function loadThemeId() {
+  try { const id = localStorage.getItem(THEME_KEY); if (id && THEMES.some(t=>t.id===id)) return id; } catch {}
+  return DEFAULT_THEME;
+}
+function applyTheme(id) {
+  const theme = THEMES.find(t=>t.id===id) || THEMES.find(t=>t.id===DEFAULT_THEME);
+  document.documentElement.setAttribute("data-theme", theme.id);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", theme.color);
+}
+function setTheme(id) {
+  try { localStorage.setItem(THEME_KEY, id); } catch {}
+  applyTheme(id);
+}
+function appearanceHTML() {
+  const current = loadThemeId();
+  const swatches = THEMES.map(t =>
+    `<button type="button" class="theme-swatch${t.id===current?" selected":""}" data-theme-id="${t.id}">
+       <span class="theme-dots">${t.dots.map(c=>`<i style="background:${c}"></i>`).join("")}</span>
+       <span class="theme-name">${t.name}</span>
+       <span class="theme-jp">${t.jp}</span>
+     </button>`).join("");
+  return `<div class="appearance-zone"><p class="label">APPEARANCE</p><p class="testing-note">Tap a colour scheme — it applies instantly and is remembered on this device.</p><div class="theme-grid">${swatches}</div></div>`;
+}
+function wireAppearance() {
+  document.querySelectorAll(".theme-swatch").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.themeId;
+      setTheme(id);
+      document.querySelectorAll(".theme-swatch").forEach(b => b.classList.toggle("selected", b.dataset.themeId === id));
+      showToast(`${THEMES.find(t=>t.id===id)?.name || "Theme"} applied`);
+    };
+  });
+}
+applyTheme(loadThemeId());
+
 function render() {
   const now = today();
   const cycle = cycleFor(now);
@@ -240,11 +292,12 @@ function openEditOpen(entry) {
 
 function openSettings() {
   const cycle=cycleFor(today()),key=cycleKey(cycle),settings=currentSettings(cycle)||{nonWorkingDays:[]},balance=openingBalance(cycle);
-  openModal("SETTINGS","Current pay cycle",`<label class="field"><span>Your name</span><input id="settingsName" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label><div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="settingsOff" value="${d}" ${settings.nonWorkingDays.includes(d)?"checked":""}>${dayNames[d]}</label>`).join("")}</div></div><div class="split-fields"><label class="field"><span>Opening hours</span><input id="settingsHours" type="number" min="0" value="${Math.floor(balance/60)}"></label><label class="field"><span>Opening minutes</span><input id="settingsMinutes" type="number" min="0" max="59" value="${balance%60}"></label></div><p id="settingsError" class="error-text"></p><button id="saveSettings" class="button button-primary" style="width:100%">Save settings</button>${syncSettingsHTML()}<div class="test-zone"><p class="label">TESTING</p><button id="loadSampleData" class="reset-option test-option"><span><strong>Load sample test data</strong><small>Add example workdays across this cycle</small></span><b>›</b></button><p class="testing-note">Sample entries are marked “Test” and may include future dates. Reset the current cycle when finished.</p></div><div class="danger-zone"><p class="label">RESET DATA</p><button id="resetCycle" class="reset-option"><span><strong>Reset current pay cycle</strong><small>Delete this cycle's hours and setup only</small></span><b>›</b></button><button id="resetAll" class="reset-option"><span><strong>Reset all app data</strong><small>Delete every saved cycle and start over</small></span><b>›</b></button></div>`);
+  openModal("SETTINGS","Current pay cycle",`<label class="field"><span>Your name</span><input id="settingsName" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label><div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="settingsOff" value="${d}" ${settings.nonWorkingDays.includes(d)?"checked":""}>${dayNames[d]}</label>`).join("")}</div></div><div class="split-fields"><label class="field"><span>Opening hours</span><input id="settingsHours" type="number" min="0" value="${Math.floor(balance/60)}"></label><label class="field"><span>Opening minutes</span><input id="settingsMinutes" type="number" min="0" max="59" value="${balance%60}"></label></div><p id="settingsError" class="error-text"></p><button id="saveSettings" class="button button-primary" style="width:100%">Save settings</button>${appearanceHTML()}${syncSettingsHTML()}<div class="test-zone"><p class="label">TESTING</p><button id="loadSampleData" class="reset-option test-option"><span><strong>Load sample test data</strong><small>Add example workdays across this cycle</small></span><b>›</b></button><p class="testing-note">Sample entries are marked “Test” and may include future dates. Reset the current cycle when finished.</p></div><div class="danger-zone"><p class="label">RESET DATA</p><button id="resetCycle" class="reset-option"><span><strong>Reset current pay cycle</strong><small>Delete this cycle's hours and setup only</small></span><b>›</b></button><button id="resetAll" class="reset-option"><span><strong>Reset all app data</strong><small>Delete every saved cycle and start over</small></span><b>›</b></button></div>`);
   $("saveSettings").onclick=()=>{const h=Number($("settingsHours").value||0),m=Number($("settingsMinutes").value||0);if(h<0||m<0||m>59){$("settingsError").textContent="Enter a valid opening balance.";return;}state.name=$("settingsName").value.trim();state.cycleSettings[key]={...settings,nonWorkingDays:[...document.querySelectorAll("input[name=settingsOff]:checked")].map(e=>Number(e.value))};state.openingBalances[key]=h*60+m;saveState();closeModal();showToast("Settings saved");};
   $("resetCycle").onclick=()=>openResetConfirmation("cycle",cycle);
   $("resetAll").onclick=()=>openResetConfirmation("all",cycle);
   $("loadSampleData").onclick=()=>openSampleDataConfirmation(cycle);
+  wireAppearance();
   wireSyncSettings();
 }
 

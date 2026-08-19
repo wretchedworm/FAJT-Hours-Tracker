@@ -7,8 +7,24 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>FAJT Hours Tracking</title>
+    <!-- Apply the saved colour scheme before the stylesheet paints, so there
+         is no flash of the default theme on load. Mirrors THEMES in app.js. -->
+    <script>
+      (function () {
+        var COLORS = {
+          seiheki: "#163f3b", nando: "#173a2b", koke: "#233820",
+          seiji: "#2f5651", fukamidori: "#101a15", original: "#102a27"
+        };
+        var id;
+        try { id = localStorage.getItem("fajt-theme-v1"); } catch (e) {}
+        if (!id || !COLORS[id]) id = "seiheki"; // default for a new device
+        document.documentElement.setAttribute("data-theme", id);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute("content", COLORS[id]);
+      })();
+    </script>
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=5" />
+    <link rel="stylesheet" href="styles.css?v=6" />
   </head>
   <body>
     <div class="app-shell">
@@ -127,6 +143,6 @@
     <script src="config.js?v=19"></script>
     <script src="sync.js?v=19"></script>
     <script src="calculations.js?v=19"></script>
-    <script src="app.js?v=19"></script>
+    <script src="app.js?v=20"></script>
   </body>
 </html>
