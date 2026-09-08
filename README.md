@@ -1,6 +1,6 @@
 # FAJT Hours Tracking
 
-A mobile-first work-hours tracker MOE FAJT teachers for two monthly pay cycles: the 1st–15th and the 16th–last day.
+A mobile-first work-hours tracker for MOE FAJT teachers, covering two monthly pay cycles: the 1st–15th and the 16th–last day.
 
 ## Live app
 
