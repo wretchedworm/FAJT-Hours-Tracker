@@ -2,6 +2,12 @@
 
 A mobile-first work-hours tracker for MOE FAJT teachers, covering two monthly pay cycles: the 1st–15th and the 16th–last day.
 
+## Features
+
+- **Set your own target hours per day.** When you clock in, choose how many hours you're aiming to work and the app works out your target clock-out time right away.
+- **See exactly how much of the cycle is left.** The pay-cycle card shows what you've clocked so far against the cycle's target, how many hours remain (or how far above target you are), and the average you'd need per remaining available day to hit it — so you can plan the rest of the cycle instead of guessing.
+- **Mark regular days off.** Exclude the weekdays you never work so they don't count against your cycle target or daily average.
+
 ## Live app
 
 https://wretchedworm.github.io/FAJT-Hours-Tracker/
