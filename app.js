@@ -7,34 +7,36 @@ const {
   localISO,
   parseISO,
   parseTime,
+  targetClockOut,
   timeText,
   totalWorkedMinutes,
   weekdaysBetween,
   workMinutes,
 } = globalThis.FAJTCalculations;
+const ops = globalThis.FAJTOperations;
+const { cycleKey, durationFromFields } = ops;
+const store = globalThis.FAJTStore;
 
-const STORAGE_KEY = "fajt-hours-v1";
 const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const defaultState = { version: 1, name: "", entries: [], openingBalances: {}, cycleSettings: {} };
-let state = loadState();
+// Read-only view of the store; every change (local or from another device)
+// lands here through subscribe and re-renders.
+let state = store.get();
+store.subscribe((next) => { state = next; render(); });
 let calendarDate = new Date();
 
 const $ = (id) => document.getElementById(id);
 const today = () => new Date();
 const todayISO = () => localISO(today());
-const cycleKey = (cycle) => `${localISO(cycle.start)}_${localISO(cycle.end)}`;
 
-function loadState() {
-  try { return { ...defaultState, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
-  catch { return structuredClone(defaultState); }
+/**
+ * Apply an operation result. On error, show the message in `errorId` (if
+ * given) and return null; otherwise hand the new state to the store (which
+ * saves, syncs and re-renders) and return the result for the toast.
+ */
+function commit(result, errorId) {
+  if (result.error) { if (errorId) $(errorId).textContent = result.error; return null; }
+  store.update(result.state); return result;
 }
-function persist() {
-  const sync = globalThis.FAJTSync;
-  if (sync) state = sync.prepare(state);
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  sync?.notifyLocalChange();
-}
-function saveState() { persist(); render(); }
 function cycleEntries(cycle) { return state.entries.filter((entry) => entryInCycle(entry, cycle)); }
 function currentSettings(cycle) { return state.cycleSettings[cycleKey(cycle)] || null; }
 function openingBalance(cycle) { return Number(state.openingBalances[cycleKey(cycle)] || 0); }
@@ -165,7 +167,7 @@ function openNamePrompt() {
      <button id="saveName" class="button button-primary" style="width:100%">Save</button>`);
   const input = $("nameInput");
   input.focus();
-  const save = () => { state.name = input.value.trim(); saveState(); closeModal(); if (state.name) showToast(`Hi, ${state.name}`); };
+  const save = () => { commit(ops.setName(state, { name: input.value })); closeModal(); if (state.name) showToast(`Hi, ${state.name}`); };
   $("saveName").onclick = save;
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") save(); });
 }
@@ -212,7 +214,6 @@ function openModal(eyebrow,title,html,{locked=false}={}) {
 function closeModal(){ $("modalBackdrop").classList.add("hidden"); document.body.style.overflow=""; }
 
 function openSetup(cycle) {
-  const key=cycleKey(cycle);
   openModal("NEW PAY CYCLE","Set up this cycle",`
     <label class="field"><span>Your name</span><input id="setupName" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label>
     <p class="muted">Choose any weekdays you know you will not work. This only adjusts your daily average—not the cycle target.</p>
@@ -220,11 +221,9 @@ function openSetup(cycle) {
     <div class="summary-box"><strong>Already worked this cycle?</strong><p class="muted">Enter an optional opening balance. You can also add detailed past entries afterward.</p><div class="split-fields"><label class="field"><span>Hours</span><input id="openingHours" type="number" min="0" value="0" inputmode="numeric"></label><label class="field"><span>Minutes</span><input id="openingMinutes" type="number" min="0" max="59" value="0" inputmode="numeric"></label></div></div>
     <p id="setupError" class="error-text"></p><button id="saveSetup" class="button button-primary" style="width:100%">Start this pay cycle</button>`,{locked:true});
   $("saveSetup").onclick=()=>{
-    const offDays=[...document.querySelectorAll("input[name=offDay]:checked")].map(el=>Number(el.value));
-    const hours=Number($("openingHours").value||0), minutes=Number($("openingMinutes").value||0);
-    if(hours<0||minutes<0||minutes>59){$("setupError").textContent="Enter a valid opening balance.";return;}
-    state.name=$("setupName").value.trim();
-    state.cycleSettings[key]={nonWorkingDays:offDays,createdAt:new Date().toISOString()}; state.openingBalances[key]=hours*60+minutes; saveState(); closeModal(); showToast("Pay cycle ready");
+    const nonWorkingDays=[...document.querySelectorAll("input[name=offDay]:checked")].map(el=>Number(el.value));
+    if(!commit(ops.saveCycleSettings(state,{cycle,name:$("setupName").value,nonWorkingDays,openingHours:$("openingHours").value,openingMinutes:$("openingMinutes").value}),"setupError")) return;
+    closeModal(); showToast("Pay cycle ready");
   };
 }
 
@@ -234,15 +233,13 @@ function openClockIn() {
   openModal("TODAY","Clock in",`${timeField("clockInTime","Clock-in time")}<div class="split-fields"><label class="field"><span>Target hours</span><input id="targetHours" type="number" min="0" value="6" inputmode="numeric"></label><label class="field"><span>Target minutes</span><input id="targetMinutes" type="number" min="0" max="59" value="30" inputmode="numeric"></label></div><div id="clockInPreview" class="summary-box hidden"></div><p id="clockInError" class="error-text"></p><button id="confirmClockIn" class="button button-primary" style="width:100%">Clock in</button>`);
   const preview=()=>{
     const start=parseTime($("clockInTime").value), target=Number($("targetHours").value||0)*60+Number($("targetMinutes").value||0);
-    const box=$("clockInPreview"); if(start===null||target<=0){box.classList.add("hidden");return;}
-    const targetOut=start+target+(start+target>12*60?30:0); box.classList.remove("hidden"); box.innerHTML=`<div class="summary-line"><span>Target clock-out</span><strong>${timeText(targetOut)}</strong></div><div class="summary-line"><span>Net target</span><strong>${durationText(target)}</strong></div>`;
+    const box=$("clockInPreview"), targetOut=targetClockOut(start,target); if(targetOut===null){box.classList.add("hidden");return;}
+    box.classList.remove("hidden"); box.innerHTML=`<div class="summary-line"><span>Target clock-out</span><strong>${timeText(targetOut)}</strong></div><div class="summary-line"><span>Net target</span><strong>${durationText(target)}</strong></div>`;
   };
   ["clockInTime","targetHours","targetMinutes"].forEach(id=>$(id).addEventListener("input",preview));
   $("confirmClockIn").onclick=()=>{
-    const start=parseTime($("clockInTime").value), h=Number($("targetHours").value||0), m=Number($("targetMinutes").value||0), target=h*60+m;
-    if(start===null){$("clockInError").textContent="Enter a valid clock-in time.";return;} if(target<=0||m>59){$("clockInError").textContent="Enter a valid target duration.";return;}
-    const targetOut=start+target+(start+target>12*60?30:0); if(targetOut>=1440){$("clockInError").textContent="The target must finish on the same day.";return;}
-    state.entries.push({id:crypto.randomUUID(),date:todayISO(),clockIn:start,targetMinutes:target,targetOut,createdAt:new Date().toISOString()}); saveState(); closeModal(); showToast(`Target clock-out: ${timeText(targetOut)}`);
+    const done=commit(ops.clockIn(state,{date:todayISO(),clockIn:$("clockInTime").value,targetMinutes:durationFromFields($("targetHours").value,$("targetMinutes").value)}),"clockInError");
+    if(done){ closeModal(); showToast(`Target clock-out: ${timeText(done.entry.targetOut)}`); }
   };
 }
 
@@ -257,7 +254,7 @@ function openClockOut() {
 function openConfirmClockOut(entry,end,result) {
   openModal("CONFIRM","Lock in these hours?",`<p class="muted">Check the details before saving. You can edit this record later if needed.</p><div class="summary-box highlight"><div class="summary-line"><span>Clock in</span><strong>${timeText(entry.clockIn)}</strong></div><div class="summary-line"><span>Clock out</span><strong>${timeText(end)}</strong></div><div class="summary-line"><span>Lunch</span><strong>${result.lunch?"30 minutes":"No deduction"}</strong></div><div class="summary-line"><span>Net worked</span><strong>${durationText(result.net)}</strong></div></div><div class="modal-actions"><button id="backToClockOut" class="button button-secondary">Go back</button><button id="lockClockOut" class="button button-primary">Confirm</button></div>`);
   $("backToClockOut").onclick=openClockOut;
-  $("lockClockOut").onclick=()=>{Object.assign(entry,{clockOut:end,elapsedMinutes:result.elapsed,lunchMinutes:result.lunch,netMinutes:result.net,confirmedAt:new Date().toISOString()});saveState();closeModal();showToast(`${durationText(result.net)} saved`);};
+  $("lockClockOut").onclick=()=>{const done=commit(ops.clockOut(state,{id:entry.id,clockOut:end}));if(done){closeModal();showToast(`${durationText(done.entry.netMinutes)} saved`);}};
 }
 
 function openEntryForDate(date) {
@@ -269,7 +266,7 @@ function openManualEntry(date) {
   openModal("PAST ENTRY",inputDateLabel(date),`${timeField("manualIn","Clock-in time")}${timeField("manualOut","Clock-out time")}<div id="manualPreview" class="summary-box hidden"></div><p id="manualError" class="error-text"></p><button id="saveManual" class="button button-primary" style="width:100%">Preview and save</button>`);
   const preview=()=>{const result=workMinutes($("manualIn").value,$("manualOut").value),box=$("manualPreview");if(!result){box.classList.add("hidden");return null;}box.classList.remove("hidden");box.innerHTML=`<div class="summary-line"><span>Lunch deduction</span><strong>${result.lunch?"30 minutes":"None"}</strong></div><div class="summary-line"><span>Net worked</span><strong>${durationText(result.net)}</strong></div>`;return result;};
   ["manualIn","manualOut"].forEach(id=>$(id).addEventListener("input",preview));
-  $("saveManual").onclick=()=>{const start=parseTime($("manualIn").value),end=parseTime($("manualOut").value),result=workMinutes(start,end);if(!result){$("manualError").textContent="Clock-out must be later than clock-in on the same day.";return;}state.entries.push({id:crypto.randomUUID(),date,clockIn:start,clockOut:end,elapsedMinutes:result.elapsed,lunchMinutes:result.lunch,netMinutes:result.net,confirmedAt:new Date().toISOString()});saveState();closeModal();showToast("Entry saved");};
+  $("saveManual").onclick=()=>{if(commit(ops.addEntry(state,{date,clockIn:$("manualIn").value,clockOut:$("manualOut").value,today:today()}),"manualError")){closeModal();showToast("Entry saved");}};
 }
 
 function openEdit(id) {
@@ -278,22 +275,22 @@ function openEdit(id) {
   openModal("EDIT ENTRY",inputDateLabel(entry.date),`${timeField("editIn","Clock-in time",timeText(entry.clockIn))}${timeField("editOut","Clock-out time",entry.clockOut!=null?timeText(entry.clockOut):"")}<div id="editPreview" class="summary-box"></div><p id="editError" class="error-text"></p><div class="modal-actions"><button id="deleteEntry" class="button button-danger">Delete</button><button id="saveEdit" class="button button-primary">Save changes</button></div>`);
   const preview=()=>{const result=workMinutes($("editIn").value,$("editOut").value),box=$("editPreview");box.innerHTML=result?`<div class="summary-line"><span>Lunch deduction</span><strong>${result.lunch?"30 minutes":"None"}</strong></div><div class="summary-line"><span>Net worked</span><strong>${durationText(result.net)}</strong></div>`:`<span>Enter a valid clock-in and clock-out time.</span>`;return result;};preview();
   ["editIn","editOut"].forEach(x=>$(x).addEventListener("input",preview));
-  $("saveEdit").onclick=()=>{const start=parseTime($("editIn").value),end=parseTime($("editOut").value),result=workMinutes(start,end);if(!result){$("editError").textContent="Clock-out must be later than clock-in on the same day.";return;}Object.assign(entry,{clockIn:start,clockOut:end,elapsedMinutes:result.elapsed,lunchMinutes:result.lunch,netMinutes:result.net,updatedAt:new Date().toISOString()});saveState();closeModal();showToast("Entry updated");};
-  $("deleteEntry").onclick=()=>{if(confirm("Delete this work entry?")){state.entries=state.entries.filter(e=>e.id!==id);saveState();closeModal();showToast("Entry deleted");}};
+  $("saveEdit").onclick=()=>{if(commit(ops.editEntry(state,{id,clockIn:$("editIn").value,clockOut:$("editOut").value}),"editError")){closeModal();showToast("Entry updated");}};
+  $("deleteEntry").onclick=()=>{if(confirm("Delete this work entry?")){commit(ops.deleteEntry(state,{id}));closeModal();showToast("Entry deleted");}};
 }
 
 function openEditOpen(entry) {
   openModal("EDIT ENTRY",inputDateLabel(entry.date),`${timeField("editInOpen","Clock-in time",timeText(entry.clockIn))}<div class="split-fields"><label class="field"><span>Target hours</span><input id="editTargetHours" type="number" min="0" value="${Math.floor((entry.targetMinutes||0)/60)}" inputmode="numeric"></label><label class="field"><span>Target minutes</span><input id="editTargetMinutes" type="number" min="0" max="59" value="${(entry.targetMinutes||0)%60}" inputmode="numeric"></label></div><div id="editOpenPreview" class="summary-box hidden"></div><p id="editOpenError" class="error-text"></p><div class="modal-actions"><button id="deleteEntryOpen" class="button button-danger">Delete</button><button id="saveEditOpen" class="button button-primary">Save changes</button></div>`);
-  const preview=()=>{const start=parseTime($("editInOpen").value),target=Number($("editTargetHours").value||0)*60+Number($("editTargetMinutes").value||0),box=$("editOpenPreview");if(start===null||target<=0){box.classList.add("hidden");return;}const targetOut=start+target+(start+target>12*60?30:0);box.classList.remove("hidden");box.innerHTML=`<div class="summary-line"><span>Target clock-out</span><strong>${timeText(targetOut)}</strong></div><div class="summary-line"><span>Net target</span><strong>${durationText(target)}</strong></div>`;};
+  const preview=()=>{const start=parseTime($("editInOpen").value),target=Number($("editTargetHours").value||0)*60+Number($("editTargetMinutes").value||0),box=$("editOpenPreview"),targetOut=targetClockOut(start,target);if(targetOut===null){box.classList.add("hidden");return;}box.classList.remove("hidden");box.innerHTML=`<div class="summary-line"><span>Target clock-out</span><strong>${timeText(targetOut)}</strong></div><div class="summary-line"><span>Net target</span><strong>${durationText(target)}</strong></div>`;};
   ["editInOpen","editTargetHours","editTargetMinutes"].forEach(id=>$(id).addEventListener("input",preview));preview();
-  $("saveEditOpen").onclick=()=>{const start=parseTime($("editInOpen").value),h=Number($("editTargetHours").value||0),m=Number($("editTargetMinutes").value||0),target=h*60+m;if(start===null){$("editOpenError").textContent="Enter a valid clock-in time.";return;}if(target<=0||m>59){$("editOpenError").textContent="Enter a valid target duration.";return;}const targetOut=start+target+(start+target>12*60?30:0);if(targetOut>=1440){$("editOpenError").textContent="The target must finish on the same day.";return;}Object.assign(entry,{clockIn:start,targetMinutes:target,targetOut,updatedAt:new Date().toISOString()});saveState();closeModal();showToast("Clock-in updated");};
-  $("deleteEntryOpen").onclick=()=>{if(confirm("Delete this work entry?")){state.entries=state.entries.filter(e=>e.id!==entry.id);saveState();closeModal();showToast("Entry deleted");}};
+  $("saveEditOpen").onclick=()=>{if(commit(ops.editOpenEntry(state,{id:entry.id,clockIn:$("editInOpen").value,targetMinutes:durationFromFields($("editTargetHours").value,$("editTargetMinutes").value)}),"editOpenError")){closeModal();showToast("Clock-in updated");}};
+  $("deleteEntryOpen").onclick=()=>{if(confirm("Delete this work entry?")){commit(ops.deleteEntry(state,{id:entry.id}));closeModal();showToast("Entry deleted");}};
 }
 
 function openSettings() {
-  const cycle=cycleFor(today()),key=cycleKey(cycle),settings=currentSettings(cycle)||{nonWorkingDays:[]},balance=openingBalance(cycle);
+  const cycle=cycleFor(today()),settings=currentSettings(cycle)||{nonWorkingDays:[]},balance=openingBalance(cycle);
   openModal("SETTINGS","Current pay cycle",`<label class="field"><span>Your name</span><input id="settingsName" type="text" placeholder="e.g. Darren" value="${(state.name||"").replace(/"/g,"&quot;")}" autocomplete="given-name" maxlength="30"></label><div class="field"><span>Regular non-working days</span><div class="check-grid">${[1,2,3,4,5].map(d=>`<label class="check-option"><input type="checkbox" name="settingsOff" value="${d}" ${settings.nonWorkingDays.includes(d)?"checked":""}>${dayNames[d]}</label>`).join("")}</div></div><div class="split-fields"><label class="field"><span>Opening hours</span><input id="settingsHours" type="number" min="0" value="${Math.floor(balance/60)}"></label><label class="field"><span>Opening minutes</span><input id="settingsMinutes" type="number" min="0" max="59" value="${balance%60}"></label></div><p id="settingsError" class="error-text"></p><button id="saveSettings" class="button button-primary" style="width:100%">Save settings</button>${appearanceHTML()}${syncSettingsHTML()}<div class="test-zone"><p class="label">TESTING</p><button id="loadSampleData" class="reset-option test-option"><span><strong>Load sample test data</strong><small>Add example workdays across this cycle</small></span><b>›</b></button><p class="testing-note">Sample entries are marked “Test” and may include future dates. Reset the current cycle when finished.</p></div><div class="danger-zone"><p class="label">RESET DATA</p><button id="resetCycle" class="reset-option"><span><strong>Reset current pay cycle</strong><small>Delete this cycle's hours and setup only</small></span><b>›</b></button><button id="resetAll" class="reset-option"><span><strong>Reset all app data</strong><small>Delete every saved cycle and start over</small></span><b>›</b></button></div>`);
-  $("saveSettings").onclick=()=>{const h=Number($("settingsHours").value||0),m=Number($("settingsMinutes").value||0);if(h<0||m<0||m>59){$("settingsError").textContent="Enter a valid opening balance.";return;}state.name=$("settingsName").value.trim();state.cycleSettings[key]={...settings,nonWorkingDays:[...document.querySelectorAll("input[name=settingsOff]:checked")].map(e=>Number(e.value))};state.openingBalances[key]=h*60+m;saveState();closeModal();showToast("Settings saved");};
+  $("saveSettings").onclick=()=>{const nonWorkingDays=[...document.querySelectorAll("input[name=settingsOff]:checked")].map(e=>Number(e.value));if(commit(ops.saveCycleSettings(state,{cycle,name:$("settingsName").value,nonWorkingDays,openingHours:$("settingsHours").value,openingMinutes:$("settingsMinutes").value}),"settingsError")){closeModal();showToast("Settings saved");}};
   $("resetCycle").onclick=()=>openResetConfirmation("cycle",cycle);
   $("resetAll").onclick=()=>openResetConfirmation("all",cycle);
   $("loadSampleData").onclick=()=>openSampleDataConfirmation(cycle);
@@ -355,9 +352,7 @@ function openPasscodePrompt({ fromSettings = false } = {}) {
     submit.textContent = "Connecting…";
     try {
       await globalThis.FAJTSync.connect(input.value);
-      state = loadState();
       closeModal();
-      render();
       showToast("Sync is on");
       // If the cloud had nothing for this passcode, this device still needs a
       // cycle set up. If it pulled an existing cycle, settings already exist.
@@ -388,29 +383,7 @@ function openSampleDataConfirmation(cycle) {
   openModal("TESTING","Load sample workdays?",`<div class="summary-box"><strong>What this adds</strong><p class="muted">Five example weekday entries across the current pay cycle, each with different hours. Existing dates will not be overwritten.</p></div><p class="notice">Some examples may be future dates. They are test records only and will be labelled in the breakdown.</p><div class="modal-actions"><button id="cancelSample" class="button button-secondary">Cancel</button><button id="confirmSample" class="button button-primary">Load samples</button></div>`);
   $("cancelSample").onclick=openSettings;
   $("confirmSample").onclick=()=>{
-    const patterns=[
-      {clockIn:8*60,clockOut:17*60+30},
-      {clockIn:7*60+15,clockOut:17*60+30},
-      {clockIn:8*60+30,clockOut:18*60},
-      {clockIn:9*60,clockOut:17*60},
-      {clockIn:7*60+45,clockOut:18*60+15},
-    ];
-    const weekdays=[];
-    const cursor=new Date(cycle.start);
-    while(cursor<=cycle.end) {
-      if(cursor.getDay()!==0&&cursor.getDay()!==6) weekdays.push(localISO(cursor));
-      cursor.setDate(cursor.getDate()+1);
-    }
-    const selected=[0,2,5,8,weekdays.length-1].map(index=>weekdays[index]).filter(Boolean);
-    let added=0;
-    selected.forEach((date,index)=>{
-      if(state.entries.some(entry=>entry.date===date)) return;
-      const pattern=patterns[index%patterns.length];
-      const result=workMinutes(pattern.clockIn,pattern.clockOut);
-      state.entries.push({id:crypto.randomUUID(),date,clockIn:pattern.clockIn,clockOut:pattern.clockOut,elapsedMinutes:result.elapsed,lunchMinutes:result.lunch,netMinutes:result.net,isTest:true,confirmedAt:new Date().toISOString()});
-      added++;
-    });
-    saveState();
+    const { added }=commit(ops.loadSampleData(state,{cycle}));
     closeModal();
     showToast(added?`${added} sample workdays added`:"Sample dates already have entries");
   };
@@ -422,17 +395,8 @@ function openResetConfirmation(scope, cycle) {
   $("cancelReset").onclick=openSettings;
   $("resetConfirmation").addEventListener("input",()=>{$("confirmReset").disabled=$("resetConfirmation").value.trim().toUpperCase()!=="RESET";});
   $("confirmReset").onclick=()=>{
-    if(isAll) {
-      state=structuredClone(defaultState);
-    } else {
-      const key=cycleKey(cycle);
-      state.entries=state.entries.filter(entry=>!entryInCycle(entry,cycle));
-      delete state.openingBalances[key];
-      delete state.cycleSettings[key];
-    }
-    persist();
+    commit(isAll?ops.resetAll():ops.resetCycle(state,{cycle}));
     closeModal();
-    render();
     showToast(isAll?"All app data reset":"Current pay cycle reset");
   };
 }
@@ -453,19 +417,10 @@ render();
   if (!sync) return;
 
   sync.onStatus(renderSyncPill);
-
-  // A device that pulled newer records from the cloud re-renders in place.
-  sync.onRemoteUpdate = (merged) => {
-    state = { ...defaultState, ...merged };
-    render();
-  };
-
   if (!sync.configured) return;
 
   const restored = await sync.restore();
   if (restored) {
-    state = loadState();
-    render();
     maybeOpenSetup();
   } else {
     openPasscodePrompt();

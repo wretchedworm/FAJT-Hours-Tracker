@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 await import("./calculations.js");
-const { availableDays, cycleFor, parseTime, totalWorkedMinutes, weekdaysBetween, workMinutes } = globalThis.FAJTCalculations;
+const { availableDays, cycleFor, parseTime, targetClockOut, totalWorkedMinutes, weekdaysBetween, workMinutes } = globalThis.FAJTCalculations;
 
 test("accepts compact and colon time formats",()=>{
   assert.equal(parseTime("0715"),435); assert.equal(parseTime("7:15"),435); assert.equal(parseTime("800"),480); assert.equal(parseTime("2560"),null);
+  assert.equal(parseTime(""),null); assert.equal(parseTime("   "),null); assert.equal(parseTime("0000"),0);
 });
 test("deducts lunch only after noon",()=>{
   assert.deepEqual(workMinutes("0800","1200"),{elapsed:240,lunch:0,net:240});
@@ -31,4 +32,13 @@ test("unfinished clock-ins do not corrupt worked totals",()=>{
     {clockIn:480,clockOut:1020,netMinutes:510},
   ];
   assert.equal(totalWorkedMinutes(entries,60),570);
+});
+test("target clock-out adds lunch only when the target runs past noon",()=>{
+  assert.equal(targetClockOut(480,240),720);   // 08:00 + 4h ends exactly at noon, no lunch
+  assert.equal(targetClockOut(435,390),855);   // 07:15 + 6h30 crosses noon, +30m lunch
+  assert.equal(targetClockOut("0715",390),855);
+});
+test("target clock-out is null when it would not finish the same day",()=>{
+  assert.equal(targetClockOut(1380,120),null); // 23:00 + 2h
+  assert.equal(targetClockOut(null,390),null);
 });

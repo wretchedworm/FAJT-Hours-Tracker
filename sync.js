@@ -7,19 +7,17 @@
  *   2. Your whole state blob is stored in one Supabase row under that room ID.
  *   3. Every device that knows the passcode lands on the same row.
  *
- * Offline-first: localStorage is always the source of truth for reading and is
- * written first. The cloud is a mirror that is pushed to and pulled from when
- * the network allows. If you are offline the app works exactly as it does now,
- * and syncs when you come back.
+ * Offline-first: this device (store.js) is always the source of truth. The
+ * cloud is a mirror that is pushed to and pulled from when the network
+ * allows. If you are offline the app works exactly as it does now, and syncs
+ * when you come back. Merged results go back to the store via replace().
  *
  * Conflicts: merged per-record, not last-writer-wins on the whole blob. Two
  * devices editing different days while offline both keep their edits. Two
  * devices editing the SAME day — the later edit wins.
  */
 (() => {
-  const LOCAL_KEY = "fajt-hours-v1";
   const META_KEY = "fajt-sync-meta-v1";
-  const SNAPSHOT_KEY = "fajt-sync-snapshot-v1";
   const POLL_MS = 20000;
 
   const cfg = globalThis.FAJT_CONFIG || {};
@@ -63,54 +61,13 @@
     return `fallback${h1.toString(16).padStart(8, "0")}${h2.toString(16).padStart(8, "0")}`;
   }
 
-  /* -------------------------------------------------------- change stamps */
+  /* ------------------------------------------------------------ merge them */
 
   const byDate = (entries) => {
     const map = {};
     (entries || []).forEach((entry) => { if (entry?.date) map[entry.date] = entry; });
     return map;
   };
-  const settingsFingerprint = (state) =>
-    JSON.stringify([state?.openingBalances || {}, state?.cycleSettings || {}, state?.name || ""]);
-
-  /**
-   * Compare the state about to be saved against the last snapshot and record
-   * WHEN each day changed. This lets us merge intelligently later without
-   * having to touch every place in app.js that edits an entry.
-   */
-  function stampChanges(state) {
-    const prev = readJSON(SNAPSHOT_KEY, null);
-    const now = Date.now();
-    state.entryStamps = { ...(state.entryStamps || {}) };
-    state.deletedEntries = { ...(state.deletedEntries || {}) };
-
-    const current = byDate(state.entries);
-    const previous = byDate(prev?.entries);
-
-    for (const date of Object.keys(current)) {
-      const changed = !previous[date] ||
-        JSON.stringify(previous[date]) !== JSON.stringify(current[date]);
-      if (changed || !state.entryStamps[date]) {
-        state.entryStamps[date] = now;
-        delete state.deletedEntries[date];
-      }
-    }
-    for (const date of Object.keys(previous)) {
-      if (!current[date]) {
-        state.deletedEntries[date] = now;
-        delete state.entryStamps[date];
-      }
-    }
-    if (!prev || settingsFingerprint(prev) !== settingsFingerprint(state)) {
-      state.settingsUpdatedAt = now;
-    }
-    state.settingsUpdatedAt = state.settingsUpdatedAt || now;
-    writeJSON(SNAPSHOT_KEY, state);
-    return state;
-  }
-
-  /* ----------------------------------------------------------- merge them */
-
   function mergeStates(local, remote) {
     if (!remote || typeof remote !== "object") return local;
     if (!local || typeof local !== "object") return remote;
@@ -209,8 +166,7 @@
 
   /* -------------------------------------------------------------- the loop */
 
-  const localState = () => readJSON(LOCAL_KEY, null);
-  const putLocal = (state) => writeJSON(LOCAL_KEY, state);
+  const store = () => globalThis.FAJTStore;
 
   /** Pull remote, merge, save locally, push back if we had anything new. */
   async function reconcile({ silent = false } = {}) {
@@ -219,16 +175,12 @@
     if (!silent) setStatus("syncing");
     try {
       const remote = await fetchRemote();
-      const local = localState();
+      const local = store().get();
       const merged = mergeStates(local, remote);
       const changedLocally = JSON.stringify(merged) !== JSON.stringify(local);
       const changedRemotely = JSON.stringify(merged) !== JSON.stringify(remote);
 
-      if (changedLocally) {
-        putLocal(merged);
-        writeJSON(SNAPSHOT_KEY, merged);
-        globalThis.FAJTSync.onRemoteUpdate?.(merged);
-      }
+      if (changedLocally) store().replace(merged);
       if (changedRemotely) await writeRemote(merged);
       setStatus("synced");
     } catch (error) {
@@ -236,7 +188,7 @@
     }
   }
 
-  /** Called by app.js after every local save. Debounced push. */
+  /** Called by the store after every local save. Debounced push. */
   function pushSoon() {
     if (!roomId || !configured) return;
     clearTimeout(pushTimer);
@@ -256,16 +208,11 @@
     configured,
     get status() { return status; },
     get statusDetail() { return statusDetail; },
-    get roomId() { return roomId; },
     get connected() { return Boolean(roomId && configured); },
 
     onStatus(fn) { listeners.push(fn); fn(status, statusDetail); },
-    onRemoteUpdate: null,
 
-    /** Prepare a state object for saving; always call before writing local. */
-    prepare(state) { return stampChanges(state); },
-
-    /** Fire-and-forget push after a local save. */
+    /** Fire-and-forget push after a local save (the store calls this). */
     notifyLocalChange() { pushSoon(); },
 
     /** Restore a previously entered passcode, if any. */

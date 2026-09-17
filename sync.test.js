@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-const SOURCE = readFileSync(new URL("./sync.js", import.meta.url), "utf8");
+const SOURCES = ["./calculations.js", "./operations.js", "./store.js", "./sync.js"]
+  .map((f) => readFileSync(new URL(f, import.meta.url), "utf8"));
 const LOCAL_KEY = "fajt-hours-v1";
 
 /** A fake browser: its own localStorage, its own copy of sync.js. */
@@ -21,7 +22,7 @@ function makeDevice(name, server) {
     document: { visibilityState: "hidden", addEventListener() {} },
     addEventListener() {},
     setTimeout, clearTimeout, setInterval: () => 0, clearInterval() {},
-    TextEncoder,
+    TextEncoder, Date,
     crypto: globalThis.crypto,
     console,
     FAJT_CONFIG: { url: "https://example.test", anonKey: "key" },
@@ -42,20 +43,18 @@ function makeDevice(name, server) {
   };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  vm.runInContext(SOURCE, sandbox);
+  SOURCES.forEach((src) => vm.runInContext(src, sandbox));
 
   const sync = sandbox.FAJTSync;
   return {
     name,
     sync,
     read: () => JSON.parse(localStorage.getItem(LOCAL_KEY) || "null"),
-    /** Mimic app.js: mutate state, stamp it, write it, push it. */
+    /** Like app.js: build a new state, hand it to the store, then sync. */
     async save(mutate) {
-      const state = JSON.parse(localStorage.getItem(LOCAL_KEY) || "null") ||
-        { version: 1, entries: [], openingBalances: {}, cycleSettings: {} };
+      const state = JSON.parse(JSON.stringify(sandbox.FAJTStore.get()));
       mutate(state);
-      const prepared = sync.prepare(state);
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(prepared));
+      sandbox.FAJTStore.update(state);
       await sync.refresh();
     },
     setOnline(value) { sandbox.navigator.onLine = value; },

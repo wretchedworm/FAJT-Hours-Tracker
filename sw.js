@@ -1,5 +1,5 @@
-const CACHE = "fajt-hours-v14";
-const ASSETS = ["./", "./index.html", "./styles.css?v=5", "./app.js?v=19", "./calculations.js?v=19", "./sync.js?v=19", "./config.js?v=19", "./manifest.webmanifest"];
+const CACHE = "fajt-hours-v17";
+const ASSETS = ["./", "./index.html", "./styles.css?v=6", "./app.js?v=23", "./calculations.js?v=20", "./operations.js?v=1", "./store.js?v=1", "./sync.js?v=20", "./config.js?v=19", "./manifest.webmanifest"];
 self.addEventListener("install", event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))));
 self.addEventListener("activate", event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))));
 self.addEventListener("fetch", event => {

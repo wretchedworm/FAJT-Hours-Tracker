@@ -78,15 +78,18 @@ computer — use the live URL above for your phone.
 npm test
 ```
 
-Covers the hours maths (`calculations.test.js`) and the sync merge behaviour
-(`sync.test.js` — two simulated devices against a fake server).
+Covers the hours maths (`calculations.test.js`), the rules for changing
+records such as clocking in and out or resetting a cycle
+(`operations.test.js`), local saving and change stamping (`store.test.js`),
+and the sync merge behaviour (`sync.test.js` — two simulated devices against
+a fake server).
 
 ## Deployment
 
 GitHub Pages serves the `main` branch from the repository root. Pushing to `main`
 publishes the app; allow a minute or two for the change to go live.
 
-When editing `app.js`, `calculations.js`, `sync.js`, `config.js`, or `styles.css`,
-bump the `?v=` number in `index.html` and the matching entries in `sw.js` (plus the
-`CACHE` name). Otherwise the service worker keeps serving the old cached files and
+When editing `app.js`, `calculations.js`, `operations.js`, `store.js`, `sync.js`,
+`config.js`, or `styles.css`, bump the `?v=` number in `index.html` and the
+matching entries in `sw.js` (plus the `CACHE` name). Otherwise the service worker keeps serving the old cached files and
 your changes appear to do nothing.

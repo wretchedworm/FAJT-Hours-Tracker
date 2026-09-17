@@ -16,6 +16,7 @@ function parseISO(value) {
 
 function parseTime(value) {
   const clean = String(value || "").trim().replace(/[^0-9:]/g, "");
+  if (!clean) return null;
   let hours, minutes;
   if (clean.includes(":")) [hours, minutes] = clean.split(":").map(Number);
   else {
@@ -38,12 +39,30 @@ function durationText(minutes) {
   return `${Math.floor(safe / 60)}h ${String(safe % 60).padStart(2, "0")}m`;
 }
 
+const toMinutes = (value) => (typeof value === "number" ? value : parseTime(value));
+
+/** Lunch is deducted only when the working day runs past noon. */
+function lunchFor(endMinutes) {
+  return endMinutes > 12 * 60 ? LUNCH_MINUTES : 0;
+}
+
 function workMinutes(clockIn, clockOut) {
-  const start = typeof clockIn === "number" ? clockIn : parseTime(clockIn);
-  const end = typeof clockOut === "number" ? clockOut : parseTime(clockOut);
+  const start = toMinutes(clockIn);
+  const end = toMinutes(clockOut);
   if (start === null || end === null || end <= start) return null;
-  const lunch = end > 12 * 60 ? LUNCH_MINUTES : 0;
+  const lunch = lunchFor(end);
   return { elapsed: end - start, lunch, net: Math.max(0, end - start - lunch) };
+}
+
+/**
+ * When to clock out to net `targetMinutes` of work from `clockIn`, lunch
+ * included. Null if the day would spill past midnight.
+ */
+function targetClockOut(clockIn, targetMinutes) {
+  const start = toMinutes(clockIn);
+  if (start === null || !(targetMinutes > 0)) return null;
+  const end = start + targetMinutes + lunchFor(start + targetMinutes);
+  return end >= 24 * 60 ? null : end;
 }
 
 function cycleFor(date = new Date()) {
@@ -97,6 +116,7 @@ globalThis.FAJTCalculations = {
   timeText,
   durationText,
   workMinutes,
+  targetClockOut,
   cycleFor,
   weekdaysBetween,
   availableDays,
