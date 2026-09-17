@@ -1,0 +1,27 @@
+name: Keep Supabase awake
+
+# Supabase's free tier pauses a project after about a week with no API
+# activity. This makes a harmless request to the project's REST endpoint
+# on a schedule so it never goes long enough without activity to pause.
+
+on:
+  schedule:
+    - cron: "0 0 * * 1" # every Monday at 00:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ping Supabase REST endpoint
+        run: |
+          url=$(grep -oP '(?<=url: ")[^"]*' config.js)
+          key=$(grep -oP '(?<=anonKey: ")[^"]*' config.js)
+          if [ -z "$url" ] || [ -z "$key" ]; then
+            echo "Could not read Supabase url/anonKey from config.js" >&2
+            exit 1
+          fi
+          status=$(curl -sS -o /dev/null -w "%{http_code}" "$url/rest/v1/" -H "apikey: $key")
+          echo "Supabase REST endpoint responded with HTTP $status"
