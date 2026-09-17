@@ -178,7 +178,7 @@ function renderCalendar() {
   const year=calendarDate.getFullYear(), month=calendarDate.getMonth();
   $("monthLabel").textContent=formatDate(calendarDate,{month:"long",year:"numeric"});
   const first=new Date(year,month,1), days=new Date(year,month+1,0).getDate();
-  const offset=(first.getDay()+6)%7;
+  const offset=first.getDay(); // grid starts on Sunday
   const currentCycle=cycleFor(today());
   const nonWorking=currentSettings(currentCycle)?.nonWorkingDays||[];
   let html="";
